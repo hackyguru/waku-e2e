@@ -75,13 +75,7 @@ export default function Chat() {
 
     try {
       const timestamp = new Date();
-      const newMessage = {
-        id: Date.now(),
-        text: inputText,
-        sender: 'user',
-        timestamp
-      };
-      setMessages(prev => [...prev, newMessage]);
+      // Don't add message to UI here, it will come through the receive callback
       await sendEncryptedMessage(
         node, 
         inputText, 
