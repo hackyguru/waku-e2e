@@ -10,6 +10,7 @@ export default function Chat() {
   const [isConnecting, setIsConnecting] = useState(true);
   const [contentTopic, setContentTopic] = useState('/my-app/1/chat/proto');
   const [nodeStatus, setNodeStatus] = useState('Disconnected');
+  const [peerCount, setPeerCount] = useState(0);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -28,7 +29,12 @@ export default function Chat() {
         setKeys(myKeys);
 
         setNodeStatus('Initializing Waku Node...');
-        const wakuNode = await initializeWaku();
+        const wakuNode = await initializeWaku(
+          (count) => {
+            setPeerCount(count);
+          },
+          myKeys.address
+        );
         setNode(wakuNode);
         setNodeStatus('Connected');
         setIsConnecting(false);
@@ -54,6 +60,13 @@ export default function Chat() {
     };
 
     setup();
+
+    // Cleanup function
+    return () => {
+      if (node) {
+        node.cleanup?.();
+      }
+    };
   }, []);
 
   const handleSendMessage = async (e) => {
@@ -85,7 +98,15 @@ export default function Chat() {
     <div className="container mx-auto p-4 max-w-4xl">
       {/* Technical Details Panel */}
       <div className="mb-6 bg-background border border-black/[.08] dark:border-white/[.145] rounded-lg p-4">
-        <h2 className="text-lg font-semibold mb-4">Technical Details</h2>
+        <div className="flex justify-between items-start mb-4">
+          <h2 className="text-lg font-semibold">Technical Details</h2>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-foreground/70">Users in topic:</span>
+            <span className="font-medium bg-foreground/10 px-2 py-1 rounded-full">
+              {peerCount + 1}
+            </span>
+          </div>
+        </div>
         <div className="grid grid-cols-1 gap-4">
           <div>
             <h3 className="font-medium mb-2">Node Status</h3>
