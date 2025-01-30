@@ -75,12 +75,12 @@ export default function Chat() {
 
     try {
       const timestamp = new Date();
-      // Don't add message to UI here, it will come through the receive callback
       await sendEncryptedMessage(
         node, 
         inputText, 
         peerAddress,
-        keys.address
+        keys.address,
+        keys.privateKey
       );
       setInputText('');
     } catch (error) {

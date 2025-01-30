@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@waku/sdk": "^0.0.29",
+    "crypto-js": "^4.2.0",
     "ethers": "^6.13.4",
     "next": "15.0.3",
     "protobufjs": "^7.4.0",
