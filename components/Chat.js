@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { generateKeyPair, initializeWaku, sendEncryptedMessage, receiveMessages } from '../pages/index';
 
 export default function Chat() {
@@ -10,6 +10,15 @@ export default function Chat() {
   const [isConnecting, setIsConnecting] = useState(true);
   const [contentTopic, setContentTopic] = useState('/my-app/1/chat/proto');
   const [nodeStatus, setNodeStatus] = useState('Disconnected');
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   useEffect(() => {
     const setup = async () => {
@@ -149,6 +158,7 @@ export default function Chat() {
               </div>
             </div>
           ))}
+          <div ref={messagesEndRef} />
         </div>
 
         <form onSubmit={handleSendMessage} className="p-4 border-t border-black/[.08] dark:border-white/[.145]">
