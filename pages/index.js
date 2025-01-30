@@ -2,6 +2,7 @@ import { createLightNode, waitForRemotePeer } from '@waku/sdk';
 import { createEncoder, createDecoder } from '@waku/sdk';
 import { Wallet, ethers } from 'ethers';
 import Chat from '../components/Chat';
+import { generateSharedSecret, encryptMessage, decryptMessage } from '../lib/encryption';
 
 // Content topic for the messages
 const contentTopic = '/my-app/1/chat/proto';
@@ -112,38 +113,40 @@ const initializeWaku = async (onPeersChange, myAddress) => {
   return node;
 };
 
-// Message encryption function using ethers
-const encryptMessage = async (message, recipientAddress, senderAddress) => {
+// Message encryption function using E2E encryption
+const encryptMessageE2E = async (message, recipientAddress, senderPrivateKey, senderAddress) => {
   try {
-    const messageBytes = new TextEncoder().encode(JSON.stringify({
-      content: message,
-      timestamp: new Date().toISOString()
-    }));
+    const { encrypted, timestamp } = await encryptMessage(message, senderPrivateKey, recipientAddress);
     
-    const encryptedData = {
-      message: Array.from(messageBytes),
+    // Prepare the message package
+    const messagePackage = {
+      encrypted,
       senderAddress,
-      recipientAddress
+      recipientAddress,
+      timestamp
     };
     
-    return new TextEncoder().encode(JSON.stringify(encryptedData));
+    return new TextEncoder().encode(JSON.stringify(messagePackage));
   } catch (error) {
     console.error('Failed to encrypt message:', error);
     throw error;
   }
 };
 
-// Message decryption function using ethers
-const decryptMessage = async (encryptedPayload, privateKey) => {
+// Message decryption function using E2E encryption
+const decryptMessageE2E = async (encryptedPayload, privateKey) => {
   try {
-    const decryptedData = JSON.parse(new TextDecoder().decode(encryptedPayload));
-    const messageBytes = new Uint8Array(decryptedData.message);
-    const messageContent = JSON.parse(new TextDecoder().decode(messageBytes));
+    const messagePackage = JSON.parse(new TextDecoder().decode(encryptedPayload));
+    const { encrypted, senderAddress, recipientAddress, timestamp } = messagePackage;
+
+    // Decrypt the message
+    const content = await decryptMessage(encrypted, privateKey, senderAddress, recipientAddress);
+
     return {
-      content: messageContent.content,
-      timestamp: new Date(messageContent.timestamp),
-      senderAddress: decryptedData.senderAddress,
-      recipientAddress: decryptedData.recipientAddress
+      content,
+      timestamp: new Date(timestamp),
+      senderAddress,
+      recipientAddress
     };
   } catch (error) {
     console.error('Failed to decrypt message:', error);
@@ -152,13 +155,21 @@ const decryptMessage = async (encryptedPayload, privateKey) => {
 };
 
 // Send encrypted message
-const sendEncryptedMessage = async (node, message, recipientAddress, senderAddress) => {
+const sendEncryptedMessage = async (node, message, recipientAddress, senderAddress, senderPrivateKey) => {
   const encoder = createEncoder({ contentTopic: chatTopic });
   try {
-    const encryptedPayload = await encryptMessage(message, recipientAddress, senderAddress);
+    console.log('Sending message to:', recipientAddress);
+    const encryptedPayload = await encryptMessageE2E(message, recipientAddress, senderPrivateKey, senderAddress);
+    
+    if (!encryptedPayload) {
+      throw new Error('Failed to encrypt message');
+    }
+    
     await node.lightPush.send(encoder, {
       payload: encryptedPayload
     });
+    
+    console.log('Message sent successfully');
   } catch (error) {
     console.error('Failed to send message:', error);
     throw error;
@@ -174,7 +185,7 @@ const receiveMessages = async (node, privateKey, myAddress, onMessageReceived) =
     if (!wakuMessage.payload) return;
 
     try {
-      const decryptedMessage = await decryptMessage(wakuMessage.payload, privateKey);
+      const decryptedMessage = await decryptMessageE2E(wakuMessage.payload, privateKey);
       
       if (decryptedMessage && 
           (decryptedMessage.recipientAddress === myAddress || 
