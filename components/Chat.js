@@ -31,9 +31,9 @@ export default function Chat() {
           (decryptedMessage) => {
             setMessages(prev => [...prev, {
               id: Date.now(),
-              text: decryptedMessage,
-              sender: 'peer',
-              timestamp: new Date()
+              text: decryptedMessage.content,
+              sender: decryptedMessage.senderAddress === myKeys.address ? 'user' : 'peer',
+              timestamp: new Date(decryptedMessage.timestamp)
             }]);
           }
         );
@@ -52,11 +52,12 @@ export default function Chat() {
     if (!inputText.trim() || !node || !peerAddress || !keys) return;
 
     try {
+      const timestamp = new Date();
       const newMessage = {
         id: Date.now(),
         text: inputText,
         sender: 'user',
-        timestamp: new Date()
+        timestamp
       };
       setMessages(prev => [...prev, newMessage]);
       await sendEncryptedMessage(

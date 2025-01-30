@@ -33,10 +33,11 @@ const initializeWaku = async () => {
 
 // Message encryption function using ethers
 const encryptMessage = async (message, recipientAddress, senderAddress) => {
-  const messageBytes = new TextEncoder().encode(message);
+  const messageBytes = new TextEncoder().encode(JSON.stringify({
+    content: message,
+    timestamp: new Date().toISOString()
+  }));
   
-  // Create a one-time wallet for encryption
-  const ephemeralWallet = Wallet.createRandom();
   const encryptedData = {
     message: Array.from(messageBytes),
     senderAddress,
@@ -48,14 +49,20 @@ const encryptMessage = async (message, recipientAddress, senderAddress) => {
 
 // Message decryption function using ethers
 const decryptMessage = async (encryptedPayload, privateKey) => {
-  const wallet = new Wallet(privateKey);
-  const decryptedData = JSON.parse(new TextDecoder().decode(encryptedPayload));
-  
-  // Only decrypt if message is intended for this wallet
-  if (decryptedData.recipientAddress === wallet.address) {
-    return new TextDecoder().decode(new Uint8Array(decryptedData.message));
+  try {
+    const decryptedData = JSON.parse(new TextDecoder().decode(encryptedPayload));
+    const messageBytes = new Uint8Array(decryptedData.message);
+    const messageContent = JSON.parse(new TextDecoder().decode(messageBytes));
+    return {
+      content: messageContent.content,
+      timestamp: new Date(messageContent.timestamp),
+      senderAddress: decryptedData.senderAddress,
+      recipientAddress: decryptedData.recipientAddress
+    };
+  } catch (error) {
+    console.error('Failed to decrypt message:', error);
+    return null;
   }
-  return null;
 };
 
 // Send encrypted message
@@ -66,36 +73,31 @@ const sendEncryptedMessage = async (node, message, recipientAddress, senderAddre
   await node.lightPush.send(encoder, {
     payload: encryptedPayload
   });
-  console.log("Message sent!", message);
 };
 
 // Receive and decrypt messages
-const receiveMessages = async (node, privateKey, senderAddress, onMessageReceived) => {
+const receiveMessages = async (node, privateKey, myAddress, onMessageReceived) => {
   const decoder = createDecoder(contentTopic);
 
-  const subscription = await node.filter.subscribe(
-    [decoder],
-    async (wakuMessage) => {
-      if (!wakuMessage.payload) return;
+  // Subscribe to messages
+  const callback = async (wakuMessage) => {
+    if (!wakuMessage.payload) return;
 
-      try {
-        const decryptedData = JSON.parse(new TextDecoder().decode(wakuMessage.payload));
-        
-        // Filter out self-sent messages
-        if (decryptedData.senderAddress === senderAddress) {
-          return;
-        }
-
-        const decryptedMessage = await decryptMessage(wakuMessage.payload, privateKey);
-        if (decryptedMessage) {
-          onMessageReceived(decryptedMessage);
-        }
-      } catch (error) {
-        console.error('Failed to process message:', error);
+    try {
+      const decryptedMessage = await decryptMessage(wakuMessage.payload, privateKey);
+      
+      if (decryptedMessage && 
+          (decryptedMessage.recipientAddress === myAddress || 
+           decryptedMessage.senderAddress === myAddress)) {
+        onMessageReceived(decryptedMessage);
       }
+    } catch (error) {
+      console.error('Failed to process message:', error);
     }
-  );
+  };
 
+  // Subscribe to new messages
+  const subscription = await node.filter.subscribe([decoder], callback);
   return subscription;
 };
 
